@@ -248,3 +248,90 @@
     true
   )
 )
+
+;; Validate symbol format
+(define-private (is-valid-symbol (symbol (string-ascii 10)))
+  (and
+    (not (is-eq symbol ""))
+    (not (is-eq symbol " "))
+    (>= (len symbol) u2)
+  )
+)
+
+;; Check if token is critical
+(define-private (is-critical-token (token principal))
+  (or
+    (is-eq token .wrapped-btc)
+    (is-eq token .wrapped-stx)
+  )
+)
+
+;; Check if symbol is critical
+(define-private (is-critical-symbol (symbol (string-ascii 10)))
+  (or
+    (is-eq symbol "BTC-USD")
+    (is-eq symbol "STX-USD")
+  )
+)
+
+;; Public Functions
+
+;; Write a new option
+(define-public (write-option
+    (token <sip-010-trait>)
+    (collateral-amount uint)
+    (strike-price uint)
+    (premium uint)
+    (expiry uint)
+    (option-type (string-ascii 4)))
+  (let (
+    (option-id (var-get next-option-id))
+    (current-time block-height)
+    (token-principal (contract-of token))
+  )
+    ;; Validate inputs
+    (asserts! (is-approved-token token-principal) ERR-INVALID-TOKEN)
+    (asserts! (> expiry current-time) ERR-INVALID-EXPIRY)
+    (asserts! (> strike-price u0) ERR-INVALID-STRIKE-PRICE)
+    (asserts! (> premium u0) ERR-INVALID-PREMIUM)
+    (asserts! (check-collateral-requirement collateral-amount strike-price option-type) ERR-INSUFFICIENT-COLLATERAL)
+
+    ;; Lock collateral
+    (try! (contract-call? token transfer 
+      collateral-amount 
+      tx-sender 
+      (as-contract tx-sender) 
+      none))
+
+    ;; Create option
+    (map-set options option-id {
+      writer: tx-sender,
+      holder: none,
+      collateral-amount: collateral-amount,
+      strike-price: strike-price,
+      premium: premium,
+      expiry: expiry,
+      is-exercised: false,
+      option-type: option-type,
+      state: "ACTIVE"
+    })
+
+    ;; Update user position
+    (let ((current-position (default-to 
+      { written-options: (list ), held-options: (list ), total-collateral-locked: u0 }
+      (map-get? user-positions tx-sender))))
+      (map-set user-positions tx-sender
+        (merge current-position {
+          written-options: (unwrap-panic (as-max-len? 
+            (append (get written-options current-position) option-id) u10)),
+          total-collateral-locked: (+ (get total-collateral-locked current-position) collateral-amount)
+        })
+      )
+    )
+
+    ;; Increment option ID
+    (var-set next-option-id (+ option-id u1))
+    (ok option-id)
+  )
+)
+
