@@ -286,7 +286,7 @@
     (option-type (string-ascii 4)))
   (let (
     (option-id (var-get next-option-id))
-    (current-time block-height)
+    (current-time stacks-block-height)
     (token-principal (contract-of token))
   )
     ;; Validate inputs
@@ -347,7 +347,7 @@
     ;; Validate state
     (asserts! (is-approved-token token-principal) ERR-INVALID-TOKEN)
     (asserts! (is-none (get holder option)) ERR-ALREADY-EXERCISED)
-    (asserts! (< block-height (get expiry option)) ERR-OPTION-EXPIRED)
+    (asserts! (< stacks-block-height (get expiry option)) ERR-OPTION-EXPIRED)
 
     ;; Transfer premium
     (try! (contract-call? token transfer
@@ -390,7 +390,7 @@
     (asserts! (is-approved-token token-principal) ERR-INVALID-TOKEN)
     (asserts! (is-eq (some tx-sender) (get holder option)) ERR-NOT-AUTHORIZED)
     (asserts! (not (get is-exercised option)) ERR-ALREADY-EXERCISED)
-    (asserts! (< block-height (get expiry option)) ERR-OPTION-EXPIRED)
+    (asserts! (< stacks-block-height (get expiry option)) ERR-OPTION-EXPIRED)
 
     (if (is-eq (get option-type option) "CALL")
       (exercise-call token option current-price)
@@ -436,7 +436,7 @@
   (begin
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
     (asserts! (is-allowed-symbol symbol) ERR-INVALID-SYMBOL)
-    (asserts! (>= timestamp block-height) ERR-INVALID-TIMESTAMP)
+    (asserts! (>= timestamp stacks-block-height) ERR-INVALID-TIMESTAMP)
     (asserts! (> price u0) ERR-INVALID-STRIKE-PRICE)
 
     (map-set price-feeds symbol {
