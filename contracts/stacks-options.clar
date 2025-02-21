@@ -335,6 +335,48 @@
   )
 )
 
+;; Buy an option
+(define-public (buy-option
+    (token <sip-010-trait>)
+    (option-id uint))
+  (let (
+    (option (unwrap! (map-get? options option-id) ERR-OPTION-NOT-FOUND))
+    (premium (get premium option))
+    (token-principal (contract-of token))
+  )
+    ;; Validate state
+    (asserts! (is-approved-token token-principal) ERR-INVALID-TOKEN)
+    (asserts! (is-none (get holder option)) ERR-ALREADY-EXERCISED)
+    (asserts! (< block-height (get expiry option)) ERR-OPTION-EXPIRED)
+
+    ;; Transfer premium
+    (try! (contract-call? token transfer
+      premium
+      tx-sender
+      (get writer option)
+      none))
+
+    ;; Update option
+    (map-set options option-id (merge option { 
+      holder: (some tx-sender)
+    }))
+
+    ;; Update buyer position
+    (let ((current-position (default-to 
+      { written-options: (list ), held-options: (list ), total-collateral-locked: u0 }
+      (map-get? user-positions tx-sender))))
+      (map-set user-positions tx-sender
+        (merge current-position {
+          held-options: (unwrap-panic (as-max-len? 
+            (append (get held-options current-position) option-id) u10))
+        })
+      )
+    )
+
+    (ok true)
+  )
+)
+
 ;; Exercise option
 (define-public (exercise-option
     (token <sip-010-trait>)
@@ -372,4 +414,71 @@
 ;; Get protocol fee rate
 (define-read-only (get-protocol-fee-rate)
   (var-get protocol-fee-rate)
+)
+
+;; Admin Functions
+
+;; Set protocol fee rate
+(define-public (set-protocol-fee-rate (new-rate uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    (asserts! (<= new-rate u1000) ERR-INVALID-PREMIUM)  ;; Max 10%
+    (var-set protocol-fee-rate new-rate)
+    (ok true)
+  )
+)
+
+;; Update price feed
+(define-public (update-price-feed
+    (symbol (string-ascii 10))
+    (price uint)
+    (timestamp uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    (asserts! (is-allowed-symbol symbol) ERR-INVALID-SYMBOL)
+    (asserts! (>= timestamp block-height) ERR-INVALID-TIMESTAMP)
+    (asserts! (> price u0) ERR-INVALID-STRIKE-PRICE)
+
+    (map-set price-feeds symbol {
+      price: price,
+      timestamp: timestamp,
+      source: tx-sender
+    })
+    (ok true)
+  )
+)
+
+;; Set approved token
+(define-public (set-approved-token (token principal) (approved bool))
+  (begin
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    (asserts! (is-valid-principal token) ERR-INVALID-ADDRESS)
+    (asserts! (not (is-eq token .base)) ERR-INVALID-TOKEN)
+
+    ;; Prevent removing critical tokens
+    (asserts! (or 
+      approved
+      (not (is-critical-token token))
+    ) ERR-NOT-AUTHORIZED)
+
+    (map-set approved-tokens token approved)
+    (ok true)
+  )
+)
+
+;; Set allowed symbol
+(define-public (set-allowed-symbol (symbol (string-ascii 10)) (allowed bool))
+  (begin
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR-NOT-AUTHORIZED)
+    (asserts! (is-valid-symbol symbol) ERR-EMPTY-SYMBOL)
+
+    ;; Prevent removing critical symbols
+    (asserts! (or 
+      allowed
+      (not (is-critical-symbol symbol))
+    ) ERR-NOT-AUTHORIZED)
+
+    (map-set allowed-symbols symbol allowed)
+    (ok true)
+  )
 )
