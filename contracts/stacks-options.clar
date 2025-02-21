@@ -208,3 +208,43 @@
     (ok true)
   )
 )
+
+;; Get current price from price feed
+(define-private (get-current-price)
+  (get price (unwrap! (map-get? price-feeds "BTC-USD") u0))
+)
+
+;; Get option ID helper
+(define-private (get-option-id (option {
+    writer: principal,
+    holder: (optional principal),
+    collateral-amount: uint,
+    strike-price: uint,
+    premium: uint,
+    expiry: uint,
+    is-exercised: bool,
+    option-type: (string-ascii 4),
+    state: (string-ascii 9)
+  }))
+  (var-get next-option-id)
+)
+
+;; Check if token is approved
+(define-private (is-approved-token (token principal))
+  (default-to false (map-get? approved-tokens token))
+)
+
+;; Check if symbol is allowed
+(define-private (is-allowed-symbol (symbol (string-ascii 10)))
+  (default-to false (map-get? allowed-symbols symbol))
+)
+
+;; Validate principal address
+(define-private (is-valid-principal (address principal))
+  (and
+    (not (is-eq address (as-contract tx-sender)))
+    (not (is-eq address .base))
+    (not (is-eq address tx-sender))
+    true
+  )
+)
