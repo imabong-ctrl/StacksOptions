@@ -335,3 +335,41 @@
   )
 )
 
+;; Exercise option
+(define-public (exercise-option
+    (token <sip-010-trait>)
+    (option-id uint))
+  (let (
+    (option (unwrap! (map-get? options option-id) ERR-OPTION-NOT-FOUND))
+    (current-price (get-current-price))
+    (token-principal (contract-of token))
+  )
+    ;; Validate state
+    (asserts! (is-approved-token token-principal) ERR-INVALID-TOKEN)
+    (asserts! (is-eq (some tx-sender) (get holder option)) ERR-NOT-AUTHORIZED)
+    (asserts! (not (get is-exercised option)) ERR-ALREADY-EXERCISED)
+    (asserts! (< block-height (get expiry option)) ERR-OPTION-EXPIRED)
+
+    (if (is-eq (get option-type option) "CALL")
+      (exercise-call token option current-price)
+      (exercise-put token option current-price)
+    )
+  )
+)
+
+;; Read-Only Functions
+
+;; Get option details
+(define-read-only (get-option (option-id uint))
+  (map-get? options option-id)
+)
+
+;; Get user position
+(define-read-only (get-user-position (user principal))
+  (map-get? user-positions user)
+)
+
+;; Get protocol fee rate
+(define-read-only (get-protocol-fee-rate)
+  (var-get protocol-fee-rate)
+)
